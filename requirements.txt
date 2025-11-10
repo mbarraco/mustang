@@ -1,0 +1,6 @@
+# Compiled from requirements.in using pip-compile
+# Placeholder: run `pip-compile requirements.in` to regenerate pinned deps.
+
+django>=5.1,<6.0
+djangorestframework>=3.15,<4.0
+pip-tools>=7.4

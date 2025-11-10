@@ -1,0 +1,10 @@
+# Base, shared by dev and prod
+django>=5.1,<6.0
+djangorestframework>=3.15,<4.0
+ipython>=9.7.0
+
+# Tooling shared across environments
+pip-tools>=7.4
+
+# Postgres driver (prebuilt wheels, no system libs needed)
+psycopg[binary]>=3.2

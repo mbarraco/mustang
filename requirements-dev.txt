@@ -1,0 +1,4 @@
+# Compiled from requirements-dev.in using pip-compile
+# Placeholder: run `pip-compile requirements-dev.in` to regenerate pinned deps.
+
+-r requirements.txt

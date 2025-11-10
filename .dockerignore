@@ -1,0 +1,34 @@
+.git
+.gitignore
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+env/
+venv/
+.venv/
+build/
+dist/
+*.egg-info
+.DS_Store
+*.swp
+*.swo
+
+# Project files that shouldn't be part of the image build context
+docker-compose.yml
+.env
+.vscode/
+.idea/
+
+# local docker files
+.docker
+
+# Node modules if any
+node_modules/
+
+# Tests (omit if you want tests in image)
+tests/
+
+# Leave requirements files only if you deliberately want them in the build context
+# (Dockerfile currently copies requirements.* explicitly)

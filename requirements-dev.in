@@ -1,0 +1,10 @@
+-r requirements.in
+
+# Dev-only tools can be added here
+# e.g., pytest, black, ruff
+pytest>=8.0
+pytest-sugar
+
+# Developer tooling
+# Pin pip-tools so `pip-compile` is reproducible across dev machines and CI.
+pip-tools==6.14.0
