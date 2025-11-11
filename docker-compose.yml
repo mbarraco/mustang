@@ -12,7 +12,7 @@ services:
     env_file:
       - .env
     environment:
-      - DJANGO_SETTINGS_MODULE=core.settings
+      - DJANGO_SETTINGS_MODULE=mustang.settings
     volumes:
       - ./src:/app/src
       - ./tests:/app/tests

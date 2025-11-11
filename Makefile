@@ -26,7 +26,7 @@ bash:
 # Development shell: mounts only project `src` and the dev requirements file so
 # repo-level files (docker-compose.yml, .env) aren't exposed inside the container.
 bash-dev:
-	docker run --rm -it -v $(PWD)/src:/app/src -v $(PWD)/requirements-dev.txt:/app/requirements-dev.txt -w /app $(IMAGE_DEV) bash
+	docker compose run --rm --entrypoint bash web
 
 # Clean: stop and remove containers and remove images.
 # This is destructive. To actually perform the removals set CONFIRM=1
@@ -53,7 +53,6 @@ clean:
 	@echo "Stopping all containers (required to remove images)..."
 	@containers=$$(docker ps -aq); \
 	if [ -n "$$containers" ]; then docker rm -f $$containers || true; else echo "No containers to stop."; fi; \
-	@echo "Removing ALL Docker images..."; \
 	@images=$$(docker images -aq); \
 	if [ -n "$$images" ]; then docker rmi -f $$images || true; else echo "No images to remove."; fi; \
 	@echo "Pruning system (networks, volumes, build cache)..."; \
