@@ -6,7 +6,7 @@ IMAGE_PROD ?= app:prod
 # Project name (used to detect compose-built containers/images). Defaults to current directory name.
 PROJECT ?= $(notdir $(CURDIR))
 
-.PHONY: run-tests compile-requirements run-bash run-bash-dev stop clean
+.PHONY: run-tests compile-requirements run-bash run-bash-dev runserver migrations migrate superuser stop clean
 
 build-dev:
 	docker build -f docker/Dockerfile --target dev -t $(IMAGE_DEV) .
@@ -27,6 +27,22 @@ bash:
 # repo-level files (docker-compose.yml, .env) aren't exposed inside the container.
 bash-dev:
 	docker compose run --rm --entrypoint bash web
+
+runserver:
+	docker compose up web
+
+migrations:
+	docker compose run --rm web python src/mustang/manage.py makemigrations
+
+migrate:
+	docker compose run --rm web python src/mustang/manage.py migrate
+
+superuser:
+	docker compose run --rm \
+		-e DJANGO_SUPERUSER_USERNAME=admin \
+		-e DJANGO_SUPERUSER_PASSWORD=admin \
+		-e DJANGO_SUPERUSER_EMAIL=admin@example.com \
+		web python src/mustang/manage.py createsuperuser --noinput
 
 # Clean: stop and remove containers and remove images.
 # This is destructive. To actually perform the removals set CONFIRM=1

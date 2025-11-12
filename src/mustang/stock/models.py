@@ -2,9 +2,23 @@ from decimal import Decimal, ROUND_HALF_UP
 
 from django.db import models
 
-from mustang.common.models import BaseModel
+from common.models import BaseModel
 
 from .enums import Currency, InstrumentType, OperationType
+
+
+class StockExchange(BaseModel):
+    code = models.CharField(max_length=16, unique=True)
+    name = models.CharField(max_length=255)
+    country = models.CharField(max_length=64, blank=True)
+
+    class Meta:
+        ordering = ["code"]
+        verbose_name = "Stock exchange"
+        verbose_name_plural = "Stock exchanges"
+
+    def __str__(self) -> str:
+        return f"{self.code} - {self.name}"
 
 
 class StockInstrument(BaseModel):
@@ -20,7 +34,11 @@ class StockInstrument(BaseModel):
         choices=Currency.choices,
         default=Currency.ARS,
     )
-    exchange = models.CharField(max_length=64)
+    exchange = models.ForeignKey(
+        StockExchange,
+        on_delete=models.PROTECT,
+        related_name="instruments",
+    )
 
     class Meta:
         ordering = ["symbol"]
@@ -28,7 +46,7 @@ class StockInstrument(BaseModel):
         verbose_name_plural = "Stock instruments"
 
     def __str__(self) -> str:
-        return f"{self.symbol} ({self.exchange})"
+        return f"{self.symbol} ({self.exchange.code})"
 
 
 class StockOperation(BaseModel):
@@ -65,6 +83,8 @@ class StockOperation(BaseModel):
 
     @property
     def total_value(self) -> int:
+        if self.quantity is None or self.price is None:
+            return 0
         subtotal = (self.quantity * Decimal(self.price)).quantize(
             Decimal("1"),
             rounding=ROUND_HALF_UP,
