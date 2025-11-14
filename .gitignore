@@ -23,3 +23,4 @@ media/
 # Docker
 .env
 
+db_dupmp.sql

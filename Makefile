@@ -6,7 +6,12 @@ IMAGE_PROD ?= app:prod
 # Project name (used to detect compose-built containers/images). Defaults to current directory name.
 PROJECT ?= $(notdir $(CURDIR))
 
-.PHONY: run-tests compile-requirements run-bash run-bash-dev runserver migrations migrate superuser stop clean
+.PHONY: run-tests compile-requirements run-bash run-bash-dev runserver migrations migrate superuser reset-db dump-db stop clean
+
+DB_DUMP_FILE ?= db_dump.sql
+
+psql:
+	docker compose exec db sh -c 'psql -U "$${POSTGRES_USER}" "$${POSTGRES_DB}"'
 
 build-dev:
 	docker build -f docker/Dockerfile --target dev -t $(IMAGE_DEV) .
@@ -36,6 +41,17 @@ migrations:
 
 migrate:
 	docker compose run --rm web python src/mustang/manage.py migrate
+
+reset-db:
+	docker compose run --rm web python src/mustang/manage.py flush --no-input
+
+drop-db:
+	docker compose stop db || true
+	docker rm -f $$(docker compose ps -q db) || true
+	docker volume rm $(PROJECT)_pgdata || true
+
+dump-db:
+	docker compose exec -T db sh -c 'pg_dump -U $$POSTGRES_USER $$POSTGRES_DB' > $(DB_DUMP_FILE)
 
 superuser:
 	docker compose run --rm \

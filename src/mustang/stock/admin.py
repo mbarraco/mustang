@@ -7,6 +7,7 @@ from .models import (
     ExchangeRateSnapshot,
     StockExchange,
     StockInstrument,
+    StockInstrumentSnapshot,
     StockOperation,
 )
 
@@ -39,6 +40,7 @@ class StockOperationInline(admin.TabularInline):
     model = StockOperation
     extra = 0
     fields = (
+        "user",
         "timestamp",
         "operation_type",
         "quantity",
@@ -63,6 +65,8 @@ class StockInstrumentAdmin(admin.ModelAdmin):
     list_display = (
         "symbol",
         "name",
+        "yahoo_symbol",
+        "google_symbol",
         "instrument_type",
         "currency",
         "exchange",
@@ -79,6 +83,7 @@ class StockOperationAdmin(admin.ModelAdmin):
     list_display = (
         "timestamp",
         "instrument",
+        "user",
         "operation_type",
         "quantity",
         "price",
@@ -86,10 +91,12 @@ class StockOperationAdmin(admin.ModelAdmin):
         "fees",
         "total_value_display",
     )
-    list_filter = ("operation_type", "currency", "timestamp", "instrument")
+    list_filter = ("operation_type", "currency", "timestamp", "instrument", "user")
     search_fields = (
         "instrument__symbol",
         "instrument__name",
+        "user__username",
+        "user__email",
     )
     date_hierarchy = "timestamp"
 
@@ -118,3 +125,20 @@ class ExchangeRateSnapshotAdmin(admin.ModelAdmin):
 class StockExchangeAdmin(admin.ModelAdmin):
     list_display = ("code", "name", "country", "date_created", "date_updated")
     search_fields = ("code", "name", "country")
+
+
+@admin.register(StockInstrumentSnapshot)
+class StockInstrumentSnapshotAdmin(admin.ModelAdmin):
+    list_display = (
+        "instrument",
+        "as_of",
+        "price",
+        "open_price",
+        "day_high",
+        "day_low",
+        "volume",
+        "data_source",
+    )
+    list_filter = ("instrument", "data_source")
+    search_fields = ("instrument__symbol", "instrument__name", "data_source")
+    date_hierarchy = "as_of"
