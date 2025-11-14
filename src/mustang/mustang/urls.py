@@ -17,7 +17,11 @@ Including another URLconf
 from django.contrib import admin
 from django.urls import include, path
 
+from stock.views import landing
+
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('', landing, name='landing'),
+    path('accounts/', include('django.contrib.auth.urls')),
     path('stock/', include('stock.urls', namespace='stock')),
 ]

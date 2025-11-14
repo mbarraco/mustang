@@ -117,31 +117,23 @@ class StockInstrumentSnapshot(BaseModel):
     as_of = models.DateTimeField(
         help_text="Timestamp provided by the upstream market data API.",
     )
-    price = models.DecimalField(
-        max_digits=20,
-        decimal_places=6,
-        help_text="Most recent trade price expressed in major currency units.",
+    price = models.BigIntegerField(
+        help_text="Most recent trade price expressed in minor currency units (e.g. cents).",
     )
-    open_price = models.DecimalField(
-        max_digits=20,
-        decimal_places=6,
+    open_price = models.BigIntegerField(
         null=True,
         blank=True,
-        help_text="Opening price for the current session.",
+        help_text="Opening price in minor units.",
     )
-    day_high = models.DecimalField(
-        max_digits=20,
-        decimal_places=6,
+    day_high = models.BigIntegerField(
         null=True,
         blank=True,
-        help_text="Session high price.",
+        help_text="Session high price in minor units.",
     )
-    day_low = models.DecimalField(
-        max_digits=20,
-        decimal_places=6,
+    day_low = models.BigIntegerField(
         null=True,
         blank=True,
-        help_text="Session low price.",
+        help_text="Session low price in minor units.",
     )
     volume = models.BigIntegerField(
         null=True,
@@ -170,6 +162,10 @@ class StockInstrumentSnapshot(BaseModel):
 
 
 class ExchangeRateSnapshot(BaseModel):
+    class Source(models.TextChoices):
+        AUTOMATIC = "AUTOMATIC", "Automatic"
+        MANUAL = "MANUAL", "Manual"
+
     timestamp = models.DateTimeField()
     currency = models.CharField(
         max_length=8,
@@ -177,9 +173,20 @@ class ExchangeRateSnapshot(BaseModel):
         default=Currency.USD,
         help_text="Currency quoted against ARS (e.g. USD/ARS).",
     )
-    official = models.DecimalField(max_digits=18, decimal_places=6)
-    mep = models.DecimalField(max_digits=18, decimal_places=6)
-    blue = models.DecimalField(max_digits=18, decimal_places=6)
+    official = models.BigIntegerField(help_text="Official USD/ARS rate in minor units.")
+    mep = models.BigIntegerField(help_text="MEP USD/ARS rate in minor units.")
+    blue = models.BigIntegerField(help_text="Blue USD/ARS rate in minor units.")
+    custom = models.BigIntegerField(
+        null=True,
+        blank=True,
+        help_text="User-defined USD/ARS rate in minor units. Defaults to the average of official, mep, and blue.",
+    )
+    source = models.CharField(
+        max_length=16,
+        choices=Source.choices,
+        default=Source.AUTOMATIC,
+        help_text="Whether the snapshot was created automatically or manually.",
+    )
 
     class Meta:
         ordering = ["-timestamp"]

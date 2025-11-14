@@ -1,0 +1,113 @@
+{% extends "stock/base.html" %}
+{% load currency %}
+
+{% block title %}Log stock operation · Mustang{% endblock %}
+{% block nav_operation_create_active %}active{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+      <h1 class="h3 mb-0">Log stock operation</h1>
+      <p class="text-muted mb-0">Record buys or sells directly without the admin site.</p>
+    </div>
+    <a class="btn btn-outline-secondary" href="javascript:history.back()">
+      ← Back
+    </a>
+  </div>
+
+  <div class="row g-4">
+    <div class="col-lg-7">
+      <div class="card">
+        <div class="card-body">
+          <form method="post" novalidate>
+            {% csrf_token %}
+            {% if next %}
+              <input type="hidden" name="next" value="{{ next }}">
+            {% endif %}
+            {% for field in form %}
+              <div class="mb-3">
+                <label class="form-label" for="{{ field.id_for_label }}">
+                  {{ field.label }}
+                  {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
+                </label>
+                {{ field }}
+                {% if field.help_text %}
+                  <div class="form-text">{{ field.help_text }}</div>
+                {% endif %}
+                {% if field.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in field.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+            {% if form.non_field_errors %}
+              <div class="alert alert-danger">
+                {% for error in form.non_field_errors %}
+                  <div>{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+            <div class="d-flex justify-content-end gap-2">
+              <a class="btn btn-outline-secondary" href="javascript:history.back()">Cancel</a>
+              <button type="submit" class="btn btn-primary">Save operation</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+    <div class="col-lg-5">
+      <div class="card h-100">
+        <div class="card-body">
+          <div class="d-flex justify-content-between align-items-center mb-2">
+            <h2 class="h5 mb-0">Latest FX snapshot</h2>
+            <a class="btn btn-sm btn-outline-secondary" href="{% url 'stock:exchange-rate-wizard' %}">
+              FX wizard
+            </a>
+          </div>
+          {% if fx_snapshot %}
+            <p class="text-muted small mb-3">
+              Updated {{ fx_snapshot.timestamp|date:"Y-m-d H:i" }} UTC
+            </p>
+            <div class="d-flex flex-column gap-2">
+              <div class="d-flex justify-content-between">
+                <span>Official</span>
+                <strong>${{ fx_snapshot.official|minor_to_major|floatformat:2 }}</strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>MEP</span>
+                <strong>${{ fx_snapshot.mep|minor_to_major|floatformat:2 }}</strong>
+              </div>
+              <div class="d-flex justify-content-between">
+                <span>Blue</span>
+                <strong>${{ fx_snapshot.blue|minor_to_major|floatformat:2 }}</strong>
+              </div>
+              {% if fx_snapshot.custom %}
+              <div class="d-flex justify-content-between">
+                <span>
+                  Custom
+                  <span
+                    class="text-muted"
+                    role="img"
+                    aria-label="Custom rate info"
+                    data-bs-toggle="tooltip"
+                    data-bs-placement="top"
+                    data-bs-title="Custom rate (if not manually set) defaults to the average of official, MEP, and blue quotes."
+                  >ⓘ</span>
+                </span>
+                <strong>${{ fx_snapshot.custom|minor_to_major|floatformat:2 }}</strong>
+              </div>
+              {% endif %}
+            </div>
+          {% else %}
+            <p class="text-muted mb-0">
+              No snapshots found yet. Use the FX wizard to capture official, MEP, and blue quotes.
+            </p>
+          {% endif %}
+        </div>
+      </div>
+    </div>
+  </div>
+{% endblock %}

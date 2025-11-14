@@ -1,0 +1,151 @@
+{% extends "stock/base.html" %}
+{% load humanize currency %}
+
+{% block title %}Exchange rate snapshot · Mustang{% endblock %}
+{% block nav_rates_active %}active{% endblock %}
+
+{% block content %}
+  <div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+      <h1 class="h3 mb-1">USD/ARS exchange rates</h1>
+      <p class="text-muted mb-0">Automatic scrape from ámbito.com with manual override when needed.</p>
+    </div>
+    <div class="d-flex gap-2">
+      <form method="post">
+        {% csrf_token %}
+        <input type="hidden" name="action" value="refresh">
+        <button type="submit" class="btn btn-primary">Refresh from Ámbito</button>
+      </form>
+      <a class="btn btn-outline-secondary" href="{% url 'stock:exchange-rate-wizard' %}?manual=1">Manual entry</a>
+    </div>
+  </div>
+
+  {% if auto_fetch_error %}
+    <div class="alert alert-danger">
+      Automatic refresh failed: {{ auto_fetch_error }}
+    </div>
+  {% endif %}
+
+  {% if latest_snapshot %}
+    <div class="row g-4 mb-4">
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h2 class="h6 text-muted">Official</h2>
+            <p class="h3 mb-0">{{ latest_snapshot.official|minor_to_major|floatformat:2|intcomma }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h2 class="h6 text-muted">MEP</h2>
+            <p class="h3 mb-0">{{ latest_snapshot.mep|minor_to_major|floatformat:2|intcomma }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <h2 class="h6 text-muted">Blue</h2>
+            <p class="h3 mb-0">{{ latest_snapshot.blue|minor_to_major|floatformat:2|intcomma }}</p>
+          </div>
+        </div>
+      </div>
+      <div class="col-md-4">
+        <div class="card">
+          <div class="card-body">
+            <div class="d-flex justify-content-between align-items-center">
+              <h2 class="h6 text-muted mb-0">Custom</h2>
+              <span
+                class="text-muted"
+                role="img"
+                aria-label="Custom rate info"
+                data-bs-toggle="tooltip"
+                data-bs-placement="top"
+                data-bs-title="{{ custom_tooltip }}"
+              >ⓘ</span>
+            </div>
+            <p class="h3 mb-0">{{ latest_snapshot.custom|minor_to_major|floatformat:2|intcomma }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+    <p class="text-white-50 small">
+      Snapshot recorded {{ latest_snapshot.timestamp|date:"Y-m-d H:i" }} UTC.
+      <span class="ms-2">Source: {{ latest_snapshot.get_source_display }}</span>
+      {% if not snapshot_is_recent %}
+        <span class="text-warning">Older than 30 minutes, consider refreshing.</span>
+      {% endif %}
+    </p>
+  {% else %}
+    <div class="alert alert-info">
+      No exchange rate snapshots recorded yet.
+    </div>
+  {% endif %}
+
+  {% if manual_mode %}
+    <div class="card mt-4">
+      <div class="card-body">
+        <h2 class="h5 mb-3">Manual entry</h2>
+        <form method="post" novalidate>
+          {% csrf_token %}
+          <input type="hidden" name="action" value="manual">
+          <div class="row g-3">
+            {% for field in form %}
+              <div class="col-md-3">
+                <label class="form-label" for="{{ field.id_for_label }}">
+                  {{ field.label }}
+                  {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
+                  {% if field.name == "custom" %}
+                    <span
+                      class="text-muted"
+                      role="img"
+                      aria-label="Custom rate info"
+                      data-bs-toggle="tooltip"
+                      data-bs-placement="top"
+                      data-bs-title="{{ custom_tooltip }}"
+                    >ⓘ</span>
+                  {% endif %}
+                </label>
+                {{ field }}
+                {% if field.help_text %}
+                  <div class="form-text">{{ field.help_text }}</div>
+                {% endif %}
+                {% if field.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in field.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            {% endfor %}
+          </div>
+          {% if form.non_field_errors %}
+            <div class="alert alert-danger mt-3">
+              {% for error in form.non_field_errors %}
+                <div>{{ error }}</div>
+              {% endfor %}
+            </div>
+          {% endif %}
+          <div class="d-flex justify-content-end gap-2 mt-4">
+            <a class="btn btn-outline-secondary" href="{% url 'stock:exchange-rate-wizard' %}">Cancel</a>
+            <button type="submit" class="btn btn-primary">Save snapshot</button>
+          </div>
+        </form>
+      </div>
+    </div>
+  {% endif %}
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'));
+      tooltipTriggerList.forEach(function (tooltipTriggerEl) {
+        new bootstrap.Tooltip(tooltipTriggerEl);
+      });
+    });
+  </script>
+{% endblock %}

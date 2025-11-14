@@ -1,0 +1,30 @@
+{% extends "stock/base.html" %}
+
+{% block title %}Mustang · Portfolio cockpit{% endblock %}
+
+{% block content %}
+  <section class="text-center py-5">
+    <h1 class="display-4 mb-3">Welcome to Mustang</h1>
+    <p class="lead text-white-50 mb-4">
+      Track stock operations, monitor FX quotes, and keep your personal market data organized.
+    </p>
+    <div class="d-flex justify-content-center gap-3 flex-wrap">
+      <a class="btn btn-primary btn-lg" href="{% url 'stock:operation-create' %}">Log an operation</a>
+      <a class="btn btn-outline-secondary btn-lg" href="{% url 'stock:exchange-rate-wizard' %}">Check FX snapshot</a>
+    </div>
+  </section>
+
+  <section class="row g-4">
+    {% for card in cta_links %}
+      <div class="col-md-4">
+        <div class="card h-100">
+          <div class="card-body d-flex flex-column">
+            <h2 class="h5">{{ card.title }}</h2>
+            <p class="flex-grow-1">{{ card.description }}</p>
+            <a class="btn btn-primary" href="{{ card.url }}">{{ card.label }}</a>
+          </div>
+        </div>
+      </div>
+    {% endfor %}
+  </section>
+{% endblock %}

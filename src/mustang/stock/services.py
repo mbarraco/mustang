@@ -13,6 +13,7 @@ from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.utils import timezone
 
 from .models import StockInstrument, StockInstrumentSnapshot
+from .utils import to_minor_units
 
 ALPHAVANTAGE_URL = "https://www.alphavantage.co/query"
 YAHOO_FINANCE_QUOTE_PAGE = "https://finance.yahoo.com/quote/{symbol}/"
@@ -24,6 +25,12 @@ DEFAULT_HTTP_HEADERS = {
     "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36",
 }
 SNAPSHOT_REFRESH_INTERVAL = timedelta(minutes=15)
+AMBITO_BASE_URL = "https://mercados.ambito.com"
+AMBITO_EXCHANGE_ENDPOINTS = {
+    "official": "/dolar/oficial/variacion",
+    "blue": "/dolar/informal/variacion",
+    "mep": "/dolarrava/mep/variacion",
+}
 
 logger = logging.getLogger(__name__)
 
@@ -159,6 +166,37 @@ def sync_stock_instrument_snapshot(
     return StockInstrumentSnapshot.objects.create(**snapshot_kwargs)
 
 
+def fetch_ambito_exchange_rates(timeout: Optional[int] = None) -> Dict[str, Any]:
+    """
+    Scrape exchange rate data from Ámbito's JSON endpoints.
+    """
+    rates: Dict[str, Decimal] = {}
+    as_of_str: Optional[str] = None
+    http_timeout = timeout or getattr(settings, "MARKET_DATA_HTTP_TIMEOUT", 10)
+
+    for key, path in AMBITO_EXCHANGE_ENDPOINTS.items():
+        response = requests.get(
+            f"{AMBITO_BASE_URL.rstrip('/')}{path}",
+            timeout=http_timeout,
+            headers=DEFAULT_HTTP_HEADERS,
+        )
+        response.raise_for_status()
+        payload = response.json()
+        rate_value = payload.get("venta") or payload.get("valor") or payload.get("ultimo")
+        if not rate_value:
+            raise ValidationError(f"Ámbito response missing a '{key}' rate.")
+        rates[key] = _parse_ambito_decimal(rate_value)
+        if not as_of_str and payload.get("fecha"):
+            as_of_str = payload["fecha"]
+
+    return {
+        "official": rates["official"],
+        "blue": rates["blue"],
+        "mep": rates["mep"],
+        "as_of": as_of_str,
+    }
+
+
 def _parse_decimal(value: Optional[str]) -> Optional[Decimal]:
     if value in (None, "", "None"):
         return None
@@ -215,14 +253,14 @@ def _extract_raw(field: Any) -> Any:
 def _build_snapshot_kwargs_from_alpha(
     instrument: StockInstrument, quote: Dict[str, Any]
 ) -> Dict[str, Any]:
-    price = _parse_decimal(quote.get("05. price")) or Decimal("0")
+    price = to_minor_units(_parse_decimal(quote.get("05. price"))) or 0
     return {
         "instrument": instrument,
         "as_of": _parse_alpha_as_of(quote),
         "price": price,
-        "open_price": _parse_decimal(quote.get("02. open")),
-        "day_high": _parse_decimal(quote.get("03. high")),
-        "day_low": _parse_decimal(quote.get("04. low")),
+        "open_price": to_minor_units(_parse_decimal(quote.get("02. open"))),
+        "day_high": to_minor_units(_parse_decimal(quote.get("03. high"))),
+        "day_low": to_minor_units(_parse_decimal(quote.get("04. low"))),
         "volume": _parse_int(quote.get("06. volume")),
         "data_source": "alpha_vantage",
     }
@@ -231,14 +269,23 @@ def _build_snapshot_kwargs_from_alpha(
 def _build_snapshot_kwargs_from_yahoo(
     instrument: StockInstrument, quote: Dict[str, Any]
 ) -> Dict[str, Any]:
-    price = _parse_decimal(_extract_raw(quote.get("regularMarketPrice"))) or Decimal("0")
+    price = (
+        to_minor_units(_parse_decimal(_extract_raw(quote.get("regularMarketPrice"))))
+        or 0
+    )
     return {
         "instrument": instrument,
         "as_of": _parse_epoch_seconds(_extract_raw(quote.get("regularMarketTime"))),
         "price": price,
-        "open_price": _parse_decimal(_extract_raw(quote.get("regularMarketOpen"))),
-        "day_high": _parse_decimal(_extract_raw(quote.get("regularMarketDayHigh"))),
-        "day_low": _parse_decimal(_extract_raw(quote.get("regularMarketDayLow"))),
+        "open_price": to_minor_units(
+            _parse_decimal(_extract_raw(quote.get("regularMarketOpen")))
+        ),
+        "day_high": to_minor_units(
+            _parse_decimal(_extract_raw(quote.get("regularMarketDayHigh")))
+        ),
+        "day_low": to_minor_units(
+            _parse_decimal(_extract_raw(quote.get("regularMarketDayLow")))
+        ),
         "volume": _parse_int(_extract_raw(quote.get("regularMarketVolume"))),
         "data_source": "yahoo_finance",
     }
@@ -267,3 +314,8 @@ def _extract_yahoo_payload(page_html: str) -> Dict[str, Any]:
         .get("stores", {})
         .get("QuoteSummaryStore", {})
     )
+
+
+def _parse_ambito_decimal(value: str) -> Decimal:
+    normalized = value.replace(".", "").replace(",", ".")
+    return Decimal(normalized)
