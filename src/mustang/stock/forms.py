@@ -1,7 +1,7 @@
 from django import forms
 
 from .models import StockInstrument, StockOperation
-from .utils import to_major_units
+from .utils import to_major_units, to_minor_units
 
 
 class StockInstrumentForm(forms.ModelForm):
@@ -36,6 +36,14 @@ class StockInstrumentForm(forms.ModelForm):
 
 
 class StockOperationForm(forms.ModelForm):
+    price = forms.DecimalField(
+        max_digits=20,
+        decimal_places=2,
+        min_value=0,
+        localize=False,
+        widget=forms.NumberInput(attrs={"step": "0.01"}),
+        help_text="Enter the unit price in major currency units (e.g., dollars).",
+    )
     class Meta:
         model = StockOperation
         exclude = ["user"]
@@ -48,7 +56,6 @@ class StockOperationForm(forms.ModelForm):
             "currency": forms.Select(attrs={"class": "form-select"}),
         }
         help_texts = {
-            "price": "Enter the unit price in minor currency units (e.g., cents).",
             "fees": "Fees in minor units (defaults to 0).",
         }
 
@@ -59,6 +66,12 @@ class StockOperationForm(forms.ModelForm):
                 continue
             if "class" not in field.widget.attrs:
                 field.widget.attrs["class"] = "form-control"
+        if self.instance and self.instance.price is not None:
+            self.initial.setdefault("price", to_major_units(self.instance.price))
+
+    def clean_price(self):
+        price_value = self.cleaned_data.get("price")
+        return to_minor_units(price_value)
 
 
 class ExchangeRateSnapshotForm(forms.Form):

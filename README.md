@@ -36,3 +36,18 @@ export ALPHAVANTAGE_SECONDARY_API_KEY="secondary-key"
 
 The application automatically retries Alpha Vantage requests with the secondary key
 whenever the primary key responds with a rate-limit notice.
+
+## Linting with Ruff
+
+The project uses [Ruff](https://docs.astral.sh/ruff/) for linting/PEP 8 compliance with a
+100-character line length. After installing dev requirements run:
+
+```bash
+ruff check .
+```
+
+To autofix issues (when safe):
+
+```bash
+ruff check . --fix
+```

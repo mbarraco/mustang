@@ -24,39 +24,150 @@
             {% if next %}
               <input type="hidden" name="next" value="{{ next }}">
             {% endif %}
-            {% for field in form %}
-              <div class="mb-3">
-                <label class="form-label" for="{{ field.id_for_label }}">
-                  {{ field.label }}
-                  {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.instrument.id_for_label }}">
+                {{ form.instrument.label }}
+                {% if form.instrument.field.required %}<span class="text-danger">*</span>{% endif %}
+              </label>
+              <div class="d-flex flex-column flex-sm-row gap-2 align-items-stretch">
+                <div class="flex-grow-1">
+                  {{ form.instrument }}
+                </div>
+                <a
+                  class="btn btn-outline-secondary flex-shrink-0"
+                  href="{% url 'stock:instrument-create' %}"
+                >
+                  + New instrument
+                </a>
+              </div>
+              {% if form.instrument.help_text %}
+                <div class="form-text">{{ form.instrument.help_text }}</div>
+              {% endif %}
+              {% if form.instrument.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.instrument.errors %}
+                    <div>{{ error }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.timestamp.id_for_label }}">
+                {{ form.timestamp.label }}
+                {% if form.timestamp.field.required %}<span class="text-danger">*</span>{% endif %}
+              </label>
+              <div class="d-flex flex-wrap align-items-center gap-2">
+                {{ form.timestamp }}
+                <button
+                  type="button"
+                  class="btn btn-sm btn-outline-secondary"
+                  data-set-timestamp-target="{{ form.timestamp.auto_id }}"
+                >
+                  Set to now
+                </button>
+              </div>
+              {% if form.timestamp.help_text %}
+                <div class="form-text">{{ form.timestamp.help_text }}</div>
+              {% endif %}
+              {% if form.timestamp.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.timestamp.errors %}
+                    <div>{{ error }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.operation_type.id_for_label }}">
+                {{ form.operation_type.label }}
+                {% if form.operation_type.field.required %}<span class="text-danger">*</span>{% endif %}
+              </label>
+              {{ form.operation_type }}
+              {% if form.operation_type.help_text %}
+                <div class="form-text">{{ form.operation_type.help_text }}</div>
+              {% endif %}
+              {% if form.operation_type.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.operation_type.errors %}
+                    <div>{{ error }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
+
+            <div class="row g-3">
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.currency.id_for_label }}">
+                  {{ form.currency.label }}
+                  {% if form.currency.field.required %}<span class="text-danger">*</span>{% endif %}
                 </label>
-                {% if field.name == "instrument" %}
-                  <div class="d-flex flex-column flex-sm-row gap-2 align-items-stretch">
-                    <div class="flex-grow-1">
-                      {{ field }}
-                    </div>
-                    <a
-                      class="btn btn-outline-secondary flex-shrink-0"
-                      href="{% url 'stock:instrument-create' %}"
-                    >
-                      + New instrument
-                    </a>
-                  </div>
-                {% else %}
-                  {{ field }}
+                {{ form.currency }}
+                {% if form.currency.help_text %}
+                  <div class="form-text">{{ form.currency.help_text }}</div>
                 {% endif %}
-                {% if field.help_text %}
-                  <div class="form-text">{{ field.help_text }}</div>
-                {% endif %}
-                {% if field.errors %}
+                {% if form.currency.errors %}
                   <div class="text-danger small mt-1">
-                    {% for error in field.errors %}
+                    {% for error in form.currency.errors %}
                       <div>{{ error }}</div>
                     {% endfor %}
                   </div>
                 {% endif %}
               </div>
-            {% endfor %}
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.quantity.id_for_label }}">
+                  {{ form.quantity.label }}
+                  {% if form.quantity.field.required %}<span class="text-danger">*</span>{% endif %}
+                </label>
+                {{ form.quantity }}
+                {% if form.quantity.help_text %}
+                  <div class="form-text">{{ form.quantity.help_text }}</div>
+                {% endif %}
+                {% if form.quantity.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in form.quantity.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="col-md-4">
+                <label class="form-label" for="{{ form.price.id_for_label }}">
+                  {{ form.price.label }}
+                  {% if form.price.field.required %}<span class="text-danger">*</span>{% endif %}
+                </label>
+                {{ form.price }}
+                {% if form.price.help_text %}
+                  <div class="form-text">{{ form.price.help_text }}</div>
+                {% endif %}
+                {% if form.price.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in form.price.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+
+            <div class="mb-3">
+              <label class="form-label" for="{{ form.fees.id_for_label }}">
+                {{ form.fees.label }}
+                {% if form.fees.field.required %}<span class="text-danger">*</span>{% endif %}
+              </label>
+              {{ form.fees }}
+              {% if form.fees.help_text %}
+                <div class="form-text">{{ form.fees.help_text }}</div>
+              {% endif %}
+              {% if form.fees.errors %}
+                <div class="text-danger small mt-1">
+                  {% for error in form.fees.errors %}
+                    <div>{{ error }}</div>
+                  {% endfor %}
+                </div>
+              {% endif %}
+            </div>
             {% if form.non_field_errors %}
               <div class="alert alert-danger">
                 {% for error in form.non_field_errors %}
@@ -124,4 +235,25 @@
       </div>
     </div>
   </div>
+{% endblock %}
+
+{% block extra_scripts %}
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const buttons = document.querySelectorAll("[data-set-timestamp-target]");
+      buttons.forEach(function (button) {
+        const targetId = button.dataset.setTimestampTarget;
+        const input = document.getElementById(targetId);
+        if (!input) {
+          return;
+        }
+        button.addEventListener("click", function () {
+          const now = new Date();
+          const timezoneOffsetMs = now.getTimezoneOffset() * 60000;
+          const localDate = new Date(now.getTime() - timezoneOffsetMs);
+          input.value = localDate.toISOString().slice(0, 16);
+        });
+      });
+    });
+  </script>
 {% endblock %}

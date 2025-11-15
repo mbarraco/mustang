@@ -10,3 +10,12 @@ def google_oauth(request):
     return {
         "google_login_enabled": bool(client_id and client_secret),
     }
+
+
+def subject_user_context(request):
+    """
+    Supply the authenticated user for UI pieces that rely on the currently
+    selected subject (timeline, portfolio, etc.).
+    """
+    subject_user = request.user if request.user.is_authenticated else None
+    return {"subject_user": subject_user}

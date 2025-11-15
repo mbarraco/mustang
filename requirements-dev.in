@@ -4,6 +4,7 @@
 # e.g., pytest, black, ruff
 pytest>=8.0
 pytest-sugar
+ruff>=0.6.0
 
 # Developer tooling
 # Pin pip-tools so `pip-compile` is reproducible across dev machines and CI.

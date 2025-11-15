@@ -71,6 +71,7 @@ TEMPLATES = [
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
                 'common.context_processors.google_oauth',
+                'common.context_processors.subject_user_context',
             ],
         },
     },
@@ -164,10 +165,8 @@ LOGIN_REDIRECT_URL = "/"
 LOGOUT_REDIRECT_URL = "/"
 ACCOUNT_LOGOUT_REDIRECT_URL = LOGOUT_REDIRECT_URL
 
-ACCOUNT_AUTHENTICATION_METHOD = "username"
-ACCOUNT_USERNAME_REQUIRED = True
-ACCOUNT_EMAIL_REQUIRED = False
-ACCOUNT_SIGNUP_FIELDS = ["username"]
+ACCOUNT_LOGIN_METHODS = {"username"}
+ACCOUNT_SIGNUP_FORM_CLASS = "stock.account_forms.UsernameOnlySignupForm"
 ACCOUNT_EMAIL_VERIFICATION = "none"
 
 GOOGLE_OAUTH_CLIENT_ID = os.getenv("GOOGLE_OAUTH_CLIENT_ID", "")

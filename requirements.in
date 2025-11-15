@@ -7,8 +7,5 @@ requests>=2.32,<3.0
 ipython>=9.7.0
 PyJWT>=2.9,<3.0
 
-# Tooling shared across environments
-pip-tools>=7.4
-
 # Postgres driver (prebuilt wheels, no system libs needed)
 psycopg[binary]>=3.2
