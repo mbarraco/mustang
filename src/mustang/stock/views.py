@@ -1,16 +1,22 @@
 import logging
 from datetime import timedelta
 from decimal import Decimal, ROUND_HALF_UP
+from typing import Optional
 
+from django.conf import settings
 from django.contrib import messages
 from django.contrib.auth import get_user_model
 from django.contrib.auth.decorators import login_required
-from django.core.exceptions import ValidationError
+from django.core.cache import cache
+from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.db import IntegrityError
+from django.http import JsonResponse
 from django.shortcuts import get_object_or_404, redirect, render
 from django.urls import reverse
 from django.utils import timezone
 from django.utils.http import url_has_allowed_host_and_scheme
+
+import requests
 
 from .enums import Currency, OperationType
 from .forms import (
@@ -20,15 +26,229 @@ from .forms import (
 )
 from .models import (
     ExchangeRateSnapshot,
+    StockExchange,
     StockInstrument,
     StockInstrumentSnapshot,
     StockOperation,
 )
-from .services import fetch_ambito_exchange_rates, sync_stock_instrument_snapshot
+from .services import (
+    fetch_ambito_exchange_rates,
+    fetch_alpha_vantage_overview,
+    map_alpha_asset_type,
+    sync_stock_instrument_snapshot,
+)
 from .utils import to_minor_units
 
 logger = logging.getLogger(__name__)
 EXCHANGE_RATE_STALE_AFTER = timedelta(minutes=30)
+ALPHA_OVERVIEW_CACHE_TIMEOUT = getattr(
+    settings, "ALPHA_OVERVIEW_CACHE_TIMEOUT", 30 * 60
+)
+ALPHA_OVERVIEW_CACHE_PREFIX = "stock:alpha-overview:"
+EXCHANGE_CODE_DETAILS = {
+    "NASDAQ": {
+        "name": "Nasdaq Stock Market",
+        "aliases": [
+            "nasdaq",
+            "nasdaq global select",
+            "nasdaq global market",
+            "nasdaq capital market",
+            "nasdaqgs",
+            "nasdaqgm",
+            "nasdaqcm",
+            "nasdaq gs",
+            "nasdaq gm",
+            "nasdaq cm",
+        ],
+    },
+    "NYSE": {
+        "name": "New York Stock Exchange",
+        "aliases": [
+            "nyse",
+            "new york stock exchange",
+        ],
+    },
+    "NYSEARCA": {
+        "name": "NYSE Arca",
+        "aliases": [
+            "nyse arca",
+            "arca",
+        ],
+    },
+    "NYSEAMERICAN": {
+        "name": "NYSE American",
+        "aliases": [
+            "nyse american",
+            "amex",
+            "american stock exchange",
+        ],
+    },
+    "BCBA": {
+        "name": "Bolsas y Mercados Argentinos (BYMA)",
+        "aliases": [
+            "bcba",
+            "buenos aires",
+            "buenos aires stock exchange",
+            "bolsas y mercados argentinos",
+            "bolsa de comercio de buenos aires",
+            "byma",
+        ],
+    },
+    "B3": {
+        "name": "B3 - Brasil Bolsa Balcão",
+        "aliases": [
+            "b3",
+            "bm&f bovespa",
+            "bmf bovespa",
+            "bvmf",
+            "brasil bolsa balcao",
+        ],
+    },
+    "TSX": {
+        "name": "Toronto Stock Exchange",
+        "aliases": [
+            "tsx",
+            "tsx venture",
+            "toronto stock exchange",
+        ],
+    },
+    "LSE": {
+        "name": "London Stock Exchange",
+        "aliases": [
+            "lse",
+            "lse lon",
+            "london stock exchange",
+        ],
+    },
+    "EURONEXT": {
+        "name": "Euronext",
+        "aliases": [
+            "euronext",
+            "euronext paris",
+            "euronext amsterdam",
+            "euronext brussels",
+            "euronext lisbon",
+        ],
+    },
+    "BME": {
+        "name": "Bolsa de Madrid",
+        "aliases": [
+            "bme",
+            "bolsa de madrid",
+            "madrid",
+        ],
+    },
+    "ASX": {
+        "name": "Australian Securities Exchange",
+        "aliases": [
+            "asx",
+            "australian securities exchange",
+        ],
+    },
+    "HKEX": {
+        "name": "Hong Kong Stock Exchange",
+        "aliases": [
+            "hkex",
+            "hong kong stock exchange",
+        ],
+    },
+    "JPX": {
+        "name": "Japan Exchange Group (TSE)",
+        "aliases": [
+            "jpx",
+            "tokyo stock exchange",
+            "tse",
+            "osaka exchange",
+        ],
+    },
+    "SSE": {
+        "name": "Shanghai Stock Exchange",
+        "aliases": [
+            "sse",
+            "shanghai stock exchange",
+        ],
+    },
+    "SZSE": {
+        "name": "Shenzhen Stock Exchange",
+        "aliases": [
+            "szse",
+            "shenzhen stock exchange",
+        ],
+    },
+    "FWB": {
+        "name": "Frankfurt Stock Exchange (Xetra)",
+        "aliases": [
+            "fwb",
+            "frankfurt stock exchange",
+            "xetra",
+            "deutsche boerse",
+        ],
+    },
+    "SIX": {
+        "name": "SIX Swiss Exchange",
+        "aliases": [
+            "six",
+            "six swiss exchange",
+            "swiss exchange",
+        ],
+    },
+    "NSE": {
+        "name": "National Stock Exchange of India",
+        "aliases": [
+            "nse",
+            "national stock exchange of india",
+        ],
+    },
+    "BSE": {
+        "name": "Bombay Stock Exchange",
+        "aliases": [
+            "bse",
+            "bse india",
+            "bombay stock exchange",
+        ],
+    },
+}
+EXCHANGE_CANONICAL_NAMES = {
+    code: details.get("name")
+    for code, details in EXCHANGE_CODE_DETAILS.items()
+    if details.get("name")
+}
+EXCHANGE_HINT_LOOKUP: dict[str, str] = {}
+for canonical_code, details in EXCHANGE_CODE_DETAILS.items():
+    alias_values = {canonical_code, details.get("name", "")}
+    alias_values.update(details.get("aliases", []))
+    for alias in alias_values:
+        normalized = (alias or "").strip().lower()
+        if normalized:
+            EXCHANGE_HINT_LOOKUP[normalized] = canonical_code
+
+
+def _resolve_exchange_from_hint(exchange_hint: Optional[str]) -> Optional[StockExchange]:
+    if not exchange_hint:
+        return None
+    normalized = exchange_hint.strip().lower()
+    alias_code = EXCHANGE_HINT_LOOKUP.get(normalized)
+    candidate_codes = []
+    if alias_code:
+        candidate_codes.append(alias_code)
+    candidate_codes.append(exchange_hint)
+    for code in candidate_codes:
+        if not code:
+            continue
+        match = StockExchange.objects.filter(code__iexact=code).first()
+        if match:
+            return match
+    candidate_names = [exchange_hint]
+    canonical_name = EXCHANGE_CANONICAL_NAMES.get(alias_code)
+    if canonical_name and canonical_name not in candidate_names:
+        candidate_names.append(canonical_name)
+    for name in candidate_names:
+        if not name:
+            continue
+        match = StockExchange.objects.filter(name__iexact=name).first()
+        if match:
+            return match
+    return None
 
 
 def landing(request):
@@ -83,11 +303,129 @@ def create_stock_instrument(request):
     else:
         form = StockInstrumentForm()
 
+    lookup_url = reverse("stock:instrument-lookup")
+    if "symbol" in form.fields:
+        form.fields["symbol"].widget.attrs["data-lookup-url"] = lookup_url
+
     context = {
         "form": form,
         "next": next_url,
     }
     return render(request, "stock/instrument_form.html", context)
+
+
+@login_required
+def lookup_stock_instrument(request):
+    """Return instrument metadata for a given symbol using Alpha Vantage."""
+
+    if request.method != "GET":
+        return JsonResponse({"error": "Only GET requests are allowed."}, status=405)
+
+    symbol = (request.GET.get("symbol") or "").strip()
+    if not symbol:
+        return JsonResponse({"error": "Symbol is required."}, status=400)
+    normalized_symbol = symbol.upper()
+    logger.info(
+        "lookup_stock_instrument: user=%s requested symbol=%s",
+        getattr(request.user, "id", None),
+        normalized_symbol,
+    )
+
+    cache_key = f"{ALPHA_OVERVIEW_CACHE_PREFIX}{normalized_symbol}"
+    overview = cache.get(cache_key)
+    if overview:
+        logger.info(
+            "lookup_stock_instrument: using cached Alpha Vantage overview for %s",
+            normalized_symbol,
+        )
+    try:
+        if not overview:
+            logger.info(
+                "lookup_stock_instrument: fetching Alpha Vantage overview for %s",
+                normalized_symbol,
+            )
+            overview = fetch_alpha_vantage_overview(normalized_symbol)
+            cache.set(cache_key, overview, ALPHA_OVERVIEW_CACHE_TIMEOUT)
+            logger.info(
+                "lookup_stock_instrument: cached Alpha Vantage overview for %s",
+                normalized_symbol,
+            )
+    except ImproperlyConfigured as exc:
+        logger.info(
+            "lookup_stock_instrument: Alpha Vantage misconfigured for %s - %s",
+            normalized_symbol,
+            exc,
+        )
+        return JsonResponse({"error": str(exc)}, status=500)
+    except ValidationError as exc:
+        logger.info(
+            "lookup_stock_instrument: Alpha Vantage validation error for %s - %s",
+            normalized_symbol,
+            exc,
+        )
+        return JsonResponse({"error": str(exc)}, status=404)
+    except requests.RequestException as exc:  # pragma: no cover - network failures
+        logger.info(
+            "lookup_stock_instrument: Alpha Vantage HTTP error for %s - %s",
+            normalized_symbol,
+            exc,
+        )
+        return JsonResponse(
+            {"error": "Unable to contact Alpha Vantage. Please try again."},
+            status=502,
+        )
+
+    instrument_type = map_alpha_asset_type(overview.get("AssetType"))
+    raw_currency = (overview.get("Currency") or "").strip()
+    currency_normalized = raw_currency.upper() if raw_currency else None
+    currency_hint = None
+    currency_value = None
+    if currency_normalized:
+        if currency_normalized in Currency.values:
+            currency_value = currency_normalized
+        else:
+            currency_value = Currency.OTHER
+            currency_hint = currency_normalized
+    exchange_hint = overview.get("Exchange")
+    exchange_obj = _resolve_exchange_from_hint(exchange_hint)
+    logger.info(
+        "lookup_stock_instrument: processed overview for %s "
+        "(instrument_type=%s, currency=%s, exchange_hint=%s, resolved_exchange=%s)",
+        normalized_symbol,
+        instrument_type,
+        currency_normalized,
+        exchange_hint,
+        getattr(exchange_obj, "code", None),
+    )
+
+    payload = {
+        "symbol": overview.get("Symbol", normalized_symbol),
+        "name": overview.get("Name"),
+        "instrument_type": instrument_type,
+        "currency": currency_value,
+        "currency_hint": currency_hint,
+        "exchange": None,
+        "exchange_hint": exchange_hint,
+        "source": "alpha_vantage",
+    }
+    if exchange_obj:
+        payload["exchange"] = {
+            "id": exchange_obj.id,
+            "code": exchange_obj.code,
+            "name": exchange_obj.name,
+        }
+    elif exchange_hint:
+        logger.info(
+            "lookup_stock_instrument: no exchange match for hint '%s' (symbol=%s)",
+            exchange_hint,
+            normalized_symbol,
+        )
+    logger.info(
+        "lookup_stock_instrument: returning payload for %s with instrument_type=%s",
+        normalized_symbol,
+        instrument_type,
+    )
+    return JsonResponse(payload)
 
 
 @login_required

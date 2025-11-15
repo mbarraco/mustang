@@ -5,6 +5,7 @@ from .views import (
     create_stock_operation,
     exchange_rate_snapshot_wizard,
     instrument_performance,
+    lookup_stock_instrument,
     portfolio_summary,
     user_operation_timeline,
 )
@@ -16,6 +17,11 @@ urlpatterns = [
         "instruments/new/",
         create_stock_instrument,
         name="instrument-create",
+    ),
+    path(
+        "instruments/lookup/",
+        lookup_stock_instrument,
+        name="instrument-lookup",
     ),
     path(
         "exchange-rates/",

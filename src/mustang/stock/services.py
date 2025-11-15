@@ -5,13 +5,14 @@ import logging
 import re
 from datetime import datetime, timedelta, timezone as dt_timezone
 from decimal import Decimal
-from typing import Any, Dict, Iterable, Optional
+from typing import Any, Dict, Iterable, List, Optional
 
 import requests
 from django.conf import settings
 from django.core.exceptions import ImproperlyConfigured, ValidationError
 from django.utils import timezone
 
+from .enums import InstrumentType
 from .models import StockInstrument, StockInstrumentSnapshot
 from .utils import to_minor_units
 
@@ -32,7 +33,67 @@ AMBITO_EXCHANGE_ENDPOINTS = {
     "mep": "/dolarrava/mep/variacion",
 }
 
+ALPHA_ASSET_TYPE_MAP = {
+    "COMMON STOCK": InstrumentType.STOCK,
+    "PREFERRED STOCK": InstrumentType.STOCK,
+    "STOCK": InstrumentType.STOCK,
+    "EQUITY": InstrumentType.STOCK,
+    "ADR": InstrumentType.ADR,
+    "AMERICAN DEPOSITARY RECEIPT": InstrumentType.ADR,
+    "ETF": InstrumentType.ETF,
+    "EXCHANGE TRADED FUND": InstrumentType.ETF,
+    "BOND": InstrumentType.BOND,
+}
+
 logger = logging.getLogger(__name__)
+
+
+class AlphaVantageRateLimitError(ValidationError):
+    """Raised when Alpha Vantage signals a rate limit event."""
+
+
+def _get_alpha_api_keys(overridden: Optional[str]) -> List[str]:
+    if overridden:
+        return [overridden]
+    configured_keys: List[str] = list(getattr(settings, "ALPHAVANTAGE_API_KEYS", []))
+    if not configured_keys:
+        fallback = getattr(settings, "ALPHAVANTAGE_API_KEY", None)
+        if fallback:
+            configured_keys = [fallback]
+    keys: List[str] = []
+    for candidate in configured_keys:
+        candidate = (candidate or "").strip()
+        if candidate and candidate not in keys:
+            keys.append(candidate)
+    if not keys:
+        raise ImproperlyConfigured(
+            "Alpha Vantage API key is missing. "
+            "Set ALPHAVANTAGE_API_KEY in Django settings or the environment."
+        )
+    return keys
+
+
+def _extract_alpha_diagnostic(payload: Any) -> Optional[str]:
+    if isinstance(payload, dict):
+        for key in ("Note", "Information", "Error Message"):
+            message = payload.get(key)
+            if message:
+                return message
+    return None
+
+
+def _is_alpha_rate_limit_message(message: Optional[str]) -> bool:
+    if not message:
+        return False
+    lowered = message.lower()
+    rate_limit_signals = [
+        "standard api rate limit",
+        "please visit https://www.alphavantage.co/premium",
+        "premium plan",
+        "call frequency",
+        "rate limit",
+    ]
+    return any(signal in lowered for signal in rate_limit_signals)
 
 
 def fetch_alpha_vantage_quote(
@@ -53,28 +114,180 @@ def fetch_alpha_vantage_quote(
     requests.RequestException
         When the underlying HTTP request fails.
     """
-    key = api_key or getattr(settings, "ALPHAVANTAGE_API_KEY", None)
-    if not key:
-        raise ImproperlyConfigured(
-            "Alpha Vantage API key is missing. "
-            "Set ALPHAVANTAGE_API_KEY in Django settings or the environment."
-        )
+    timeout_value = timeout or getattr(settings, "MARKET_DATA_HTTP_TIMEOUT", 10)
+    last_rate_limit_error: Optional[AlphaVantageRateLimitError] = None
+    for idx, key in enumerate(_get_alpha_api_keys(api_key), start=1):
+        try:
+            return _fetch_alpha_vantage_quote_with_key(
+                symbol,
+                api_key=key,
+                timeout=timeout_value,
+                key_position=idx,
+            )
+        except AlphaVantageRateLimitError as exc:
+            last_rate_limit_error = exc
+            logger.info(
+                "Alpha Vantage GLOBAL_QUOTE rate limit for symbol=%s using key #%s; trying fallback.",
+                symbol,
+                idx,
+            )
+            continue
+    if last_rate_limit_error:
+        raise last_rate_limit_error
+    raise ValidationError(f"Alpha Vantage request failed for symbol '{symbol}'.")
 
+
+def fetch_alpha_vantage_overview(
+    symbol: str,
+    *,
+    api_key: Optional[str] = None,
+    timeout: Optional[int] = None,
+) -> Dict[str, Any]:
+    """Call Alpha Vantage's OVERVIEW endpoint and return the payload."""
+
+    timeout_value = timeout or getattr(settings, "MARKET_DATA_HTTP_TIMEOUT", 10)
+    last_rate_limit_error: Optional[AlphaVantageRateLimitError] = None
+    for idx, key in enumerate(_get_alpha_api_keys(api_key), start=1):
+        try:
+            return _fetch_alpha_vantage_overview_with_key(
+                symbol,
+                api_key=key,
+                timeout=timeout_value,
+                key_position=idx,
+            )
+        except AlphaVantageRateLimitError as exc:
+            last_rate_limit_error = exc
+            logger.info(
+                "Alpha Vantage OVERVIEW rate limit for symbol=%s using key #%s; trying fallback.",
+                symbol,
+                idx,
+            )
+            continue
+    if last_rate_limit_error:
+        raise last_rate_limit_error
+    raise ValidationError(f"Alpha Vantage returned no overview data for symbol '{symbol}'.")
+
+
+def _fetch_alpha_vantage_quote_with_key(
+    symbol: str,
+    *,
+    api_key: str,
+    timeout: int,
+    key_position: int,
+) -> Dict[str, Any]:
+    logger.info(
+        "Alpha Vantage GLOBAL_QUOTE request for symbol=%s (key #%s)",
+        symbol,
+        key_position,
+    )
     response = requests.get(
         ALPHAVANTAGE_URL,
         params={
             "function": "GLOBAL_QUOTE",
             "symbol": symbol,
-            "apikey": key,
+            "apikey": api_key,
         },
-        timeout=timeout or getattr(settings, "MARKET_DATA_HTTP_TIMEOUT", 10),
+        timeout=timeout,
+    )
+    logger.info(
+        "Alpha Vantage GLOBAL_QUOTE response status=%s for symbol=%s (key #%s)",
+        response.status_code,
+        symbol,
+        key_position,
     )
     response.raise_for_status()
-    payload = response.json().get("Global Quote") or {}
-    if not payload:
-        raise ValidationError(
-            f"Alpha Vantage returned an empty payload for symbol '{symbol}'."
+    raw_payload = response.json()
+    diagnostic = _extract_alpha_diagnostic(raw_payload)
+    if diagnostic:
+        logger.info(
+            "Alpha Vantage GLOBAL_QUOTE diagnostic for symbol=%s (key #%s): %s",
+            symbol,
+            key_position,
+            diagnostic,
         )
+    if _is_alpha_rate_limit_message(diagnostic):
+        logger.info(
+            "Alpha Vantage GLOBAL_QUOTE rate limit detected for symbol=%s (key #%s)",
+            symbol,
+            key_position,
+        )
+        raise AlphaVantageRateLimitError(diagnostic)
+    payload_data = raw_payload if isinstance(raw_payload, dict) else {}
+    payload = payload_data.get("Global Quote") or {}
+    if not payload:
+        message = diagnostic or f"Alpha Vantage returned an empty payload for symbol '{symbol}'."
+        raise ValidationError(message)
+    logger.info(
+        "Alpha Vantage GLOBAL_QUOTE success for symbol=%s (price=%s, volume=%s)",
+        symbol,
+        payload.get("05. price"),
+        payload.get("06. volume"),
+    )
+    return payload
+
+
+def _fetch_alpha_vantage_overview_with_key(
+    symbol: str,
+    *,
+    api_key: str,
+    timeout: int,
+    key_position: int,
+) -> Dict[str, Any]:
+    logger.info(
+        "Alpha Vantage OVERVIEW request for symbol=%s (key #%s)",
+        symbol,
+        key_position,
+    )
+    response = requests.get(
+        ALPHAVANTAGE_URL,
+        params={
+            "function": "OVERVIEW",
+            "symbol": symbol,
+            "apikey": api_key,
+        },
+        timeout=timeout,
+    )
+    logger.info(
+        "Alpha Vantage OVERVIEW response status=%s for symbol=%s (key #%s)",
+        response.status_code,
+        symbol,
+        key_position,
+    )
+    response.raise_for_status()
+    raw_payload = response.json()
+    diagnostic = _extract_alpha_diagnostic(raw_payload)
+    if diagnostic:
+        logger.info(
+            "Alpha Vantage OVERVIEW diagnostic for symbol=%s (key #%s): %s",
+            symbol,
+            key_position,
+            diagnostic,
+        )
+    if _is_alpha_rate_limit_message(diagnostic):
+        logger.info(
+            "Alpha Vantage OVERVIEW rate limit detected for symbol=%s (key #%s)",
+            symbol,
+            key_position,
+        )
+        raise AlphaVantageRateLimitError(diagnostic)
+    payload = raw_payload if isinstance(raw_payload, dict) else {}
+    payload_keys = list(payload.keys())
+    if not payload or not payload.get("Symbol"):
+        message = diagnostic or f"Alpha Vantage returned no overview data for symbol '{symbol}'."
+        logger.info(
+            "Alpha Vantage OVERVIEW missing data for symbol=%s (key #%s, keys=%s)",
+            symbol,
+            key_position,
+            payload_keys,
+        )
+        raise ValidationError(message)
+    logger.info(
+        "Alpha Vantage OVERVIEW success for symbol=%s (name=%s, exchange=%s, currency=%s)",
+        symbol,
+        payload.get("Name"),
+        payload.get("Exchange"),
+        payload.get("Currency"),
+    )
     return payload
 
 
@@ -195,6 +408,20 @@ def fetch_ambito_exchange_rates(timeout: Optional[int] = None) -> Dict[str, Any]
         "mep": rates["mep"],
         "as_of": as_of_str,
     }
+
+
+def map_alpha_asset_type(asset_type: Optional[str]) -> Optional[str]:
+    """Translate Alpha Vantage asset types to internal instrument categories."""
+
+    if not asset_type:
+        return None
+    normalized = asset_type.strip().upper()
+    if normalized in ALPHA_ASSET_TYPE_MAP:
+        return ALPHA_ASSET_TYPE_MAP[normalized]
+    for key, mapped in ALPHA_ASSET_TYPE_MAP.items():
+        if key in normalized:
+            return mapped
+    return None
 
 
 def _parse_decimal(value: Optional[str]) -> Optional[Decimal]:

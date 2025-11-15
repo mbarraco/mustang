@@ -1,0 +1,70 @@
+{% extends "stock/base.html" %}
+{% load socialaccount form_tags %}
+
+{% block title %}Sign in · Mustang{% endblock %}
+
+{% block content %}
+  <div class="mx-auto" style="max-width: 420px;">
+    <h1 class="h3 mb-4">Sign in</h1>
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger">
+        {{ form.non_field_errors|join:" " }}
+      </div>
+    {% endif %}
+
+    {% if google_login_enabled %}
+      <div class="mb-3">
+        <a
+          class="btn btn-outline-light d-flex align-items-center justify-content-center gap-2 w-100"
+          href="{% provider_login_url 'google' process='login' %}"
+        >
+          <img
+            src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+            alt=""
+            width="20"
+            height="20"
+          >
+          Continue with Google
+        </a>
+      </div>
+      <div class="text-center text-white-50 text-uppercase small my-3">
+        <span>or use your password</span>
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% if redirect_field_value %}
+        <input type="hidden" name="{{ redirect_field_name }}" value="{{ redirect_field_value }}">
+      {% endif %}
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.login.id_for_label }}">Username</label>
+        {{ form.login|add_input_class:"form-control" }}
+        {% if form.login.errors %}
+          <div class="text-danger small">{{ form.login.errors|join:" " }}</div>
+        {% endif %}
+      </div>
+      <div class="mb-3">
+        <label class="form-label" for="{{ form.password.id_for_label }}">Password XXX</label>
+        {{ form.password|add_input_class:"form-control" }}
+        {% if form.password.errors %}
+          <div class="text-danger small">{{ form.password.errors|join:" " }}</div>
+        {% endif %}
+      </div>
+      {% if form.remember %}
+        <div class="form-check mb-3">
+          {{ form.remember|add_input_class:"form-check-input" }}
+          <label class="form-check-label" for="{{ form.remember.id_for_label }}">
+            Remember me
+          </label>
+        </div>
+      {% endif %}
+      <button type="submit" class="btn btn-primary w-100">Sign in</button>
+    </form>
+
+    <p class="mt-4 text-center text-white-50">
+      Need an account?
+      <a href="{% url 'account_signup' %}">Sign up</a>
+    </p>
+  </div>
+{% endblock %}

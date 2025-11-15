@@ -22,6 +22,6 @@ from stock.views import landing
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('', landing, name='landing'),
-    path('accounts/', include('django.contrib.auth.urls')),
+    path('accounts/', include('allauth.urls')),
     path('stock/', include('stock.urls', namespace='stock')),
 ]

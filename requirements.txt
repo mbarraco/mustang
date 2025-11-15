@@ -1,8 +1,10 @@
 # Compiled from requirements.in using pip-compile
 # Placeholder: run `pip-compile requirements.in` to regenerate pinned deps.
-
+cryptography>=46.0
 django>=5.1,<6.0
+django-allauth>=65.0,<66.0
 djangorestframework>=3.15,<4.0
 pip-tools>=7.4
 requests>=2.32,<3.0
 psycopg[binary]>=3.2
+PyJWT>=2.9,<3.0

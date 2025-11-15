@@ -1,8 +1,10 @@
 from decimal import Decimal
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from django.contrib.auth import get_user_model
-from django.test import TestCase
+from django.core.cache import cache
+from django.core.exceptions import ValidationError
+from django.test import TestCase, override_settings
 from django.urls import reverse
 from django.utils import timezone
 
@@ -12,6 +14,7 @@ from .models import (
     StockInstrument,
     StockOperation,
 )
+from .services import fetch_alpha_vantage_overview
 from .utils import to_minor_units
 
 
@@ -21,10 +24,12 @@ class CreateInstrumentViewTests(TestCase):
             username="trader",
             password="testpass123",
         )
-        self.exchange = StockExchange.objects.create(
+        self.exchange, _ = StockExchange.objects.get_or_create(
             code="NYSE",
-            name="New York Stock Exchange",
-            country="US",
+            defaults={
+                "name": "New York Stock Exchange",
+                "country": "US",
+            },
         )
 
     def test_login_required(self):
@@ -72,16 +77,161 @@ class CreateInstrumentViewTests(TestCase):
         self.assertEqual(response["Location"], "/dashboard/")
 
 
+class InstrumentLookupApiTests(TestCase):
+    def setUp(self):
+        self.user = get_user_model().objects.create_user(
+            username="lookup",
+            password="secret123",
+        )
+        self.exchange, _ = StockExchange.objects.get_or_create(
+            code="NASDAQ",
+            defaults={
+                "name": "Nasdaq Stock Market",
+                "country": "US",
+            },
+        )
+        self.url = reverse("stock:instrument-lookup")
+        cache.clear()
+
+    def test_login_required(self):
+        response = self.client.get(self.url, {"symbol": "AAPL"})
+        self.assertEqual(response.status_code, 302)
+        self.assertIn("/accounts/login/", response["Location"])
+
+    @patch("stock.views.fetch_alpha_vantage_overview")
+    def test_returns_basic_metadata(self, mock_fetch):
+        mock_fetch.return_value = {
+            "Symbol": "AAPL",
+            "Name": "Apple Inc.",
+            "AssetType": "Common Stock",
+            "Currency": "USD",
+            "Exchange": "NASDAQ",
+        }
+        self.client.force_login(self.user)
+        response = self.client.get(self.url, {"symbol": "aapl"})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["symbol"], "AAPL")
+        self.assertEqual(data["name"], "Apple Inc.")
+        self.assertEqual(data["instrument_type"], "STOCK")
+        self.assertEqual(data["currency"], "USD")
+        self.assertEqual(data["exchange"]["id"], self.exchange.id)
+
+    @patch("stock.views.fetch_alpha_vantage_overview")
+    def test_returns_hint_when_exchange_not_found(self, mock_fetch):
+        mock_fetch.return_value = {
+            "Symbol": "AAA",
+            "Name": "Unknown Corp",
+            "AssetType": "ETF",
+            "Currency": "USD",
+            "Exchange": "MOCK",
+        }
+        self.client.force_login(self.user)
+        response = self.client.get(self.url, {"symbol": "AAA"})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertIsNone(data["exchange"])
+        self.assertEqual(data["exchange_hint"], "MOCK")
+
+    @patch("stock.views.fetch_alpha_vantage_overview")
+    def test_selects_exchange_using_aliases(self, mock_fetch):
+        target_exchange, _ = StockExchange.objects.get_or_create(
+            code="BCBA",
+            defaults={
+                "name": "Bolsas y Mercados Argentinos (BYMA)",
+                "country": "AR",
+            },
+        )
+        mock_fetch.return_value = {
+            "Symbol": "YPF",
+            "Name": "YPF SA",
+            "AssetType": "Common Stock",
+            "Currency": "ARS",
+            "Exchange": "Buenos Aires",
+        }
+        self.client.force_login(self.user)
+        response = self.client.get(self.url, {"symbol": "YPF"})
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["exchange"]["id"], target_exchange.id)
+
+    @patch("stock.views.fetch_alpha_vantage_overview")
+    def test_handles_validation_error(self, mock_fetch):
+        mock_fetch.side_effect = ValidationError("Alpha returned nothing")
+        self.client.force_login(self.user)
+        response = self.client.get(self.url, {"symbol": "bad"})
+        self.assertEqual(response.status_code, 404)
+        self.assertIn("Alpha returned nothing", response.json()["error"])
+
+    @patch("stock.views.fetch_alpha_vantage_overview")
+    def test_uses_cached_overview_for_repeat_symbol(self, mock_fetch):
+        mock_fetch.return_value = {
+            "Symbol": "AAPL",
+            "Name": "Apple Inc.",
+            "AssetType": "Common Stock",
+            "Currency": "USD",
+            "Exchange": "NASDAQ",
+        }
+        self.client.force_login(self.user)
+        cache.clear()
+        response = self.client.get(self.url, {"symbol": "AAPL"})
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(mock_fetch.call_count, 1)
+
+        mock_fetch.reset_mock()
+        response = self.client.get(self.url, {"symbol": "AAPL"})
+        self.assertEqual(response.status_code, 200)
+        mock_fetch.assert_not_called()
+
+
+class AlphaVantageServiceTests(TestCase):
+    @override_settings(
+        ALPHAVANTAGE_API_KEYS=["primary-key", "secondary-key"],
+        MARKET_DATA_HTTP_TIMEOUT=5,
+    )
+    @patch("stock.services.requests.get")
+    def test_fetch_overview_uses_fallback_key_when_rate_limited(self, mock_get):
+        rate_limited_response = Mock()
+        rate_limited_response.status_code = 200
+        rate_limited_response.raise_for_status.return_value = None
+        rate_limited_response.json.return_value = {
+            "Note": (
+                "We have detected your API key as PRIMARY and our standard API rate limit is 25 requests per day."
+            )
+        }
+
+        success_response = Mock()
+        success_response.status_code = 200
+        success_response.raise_for_status.return_value = None
+        success_response.json.return_value = {
+            "Symbol": "YPF",
+            "Name": "YPF SA",
+            "Currency": "ARS",
+            "Exchange": "Buenos Aires",
+        }
+
+        mock_get.side_effect = [rate_limited_response, success_response]
+
+        payload = fetch_alpha_vantage_overview("YPF")
+        self.assertEqual(payload["Symbol"], "YPF")
+        self.assertEqual(mock_get.call_count, 2)
+        first_params = mock_get.call_args_list[0].kwargs["params"]
+        second_params = mock_get.call_args_list[1].kwargs["params"]
+        self.assertEqual(first_params["apikey"], "primary-key")
+        self.assertEqual(second_params["apikey"], "secondary-key")
+
 class CreateOperationViewTests(TestCase):
     def setUp(self):
         self.user = get_user_model().objects.create_user(
             username="operator",
             password="testpass123",
         )
-        self.exchange = StockExchange.objects.create(
+        self.exchange, _ = StockExchange.objects.get_or_create(
             code="NYSE",
-            name="New York Stock Exchange",
-            country="US",
+            defaults={
+                "name": "New York Stock Exchange",
+                "country": "US",
+            },
         )
         self.instrument = StockInstrument.objects.create(
             symbol="ABC",
@@ -226,19 +376,28 @@ class AuthFlowTests(TestCase):
         )
 
     def test_login_page_loads(self):
-        response = self.client.get(reverse("login"))
+        response = self.client.get(reverse("account_login"))
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, "Sign in")
+        self.assertNotContains(response, "Continue with Google")
+
+    @override_settings(
+        GOOGLE_OAUTH_CLIENT_ID="client",
+        GOOGLE_OAUTH_CLIENT_SECRET="secret",
+    )
+    def test_google_button_visible_when_configured(self):
+        response = self.client.get(reverse("account_login"))
+        self.assertContains(response, "Continue with Google")
 
     def test_can_login_and_logout(self):
         response = self.client.post(
-            reverse("login"),
-            {"username": "authuser", "password": "pass12345"},
+            reverse("account_login"),
+            {"login": "authuser", "password": "pass12345"},
             follow=True,
         )
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.context["user"].is_authenticated)
 
-        response = self.client.post(reverse("logout"), follow=True)
+        response = self.client.post(reverse("account_logout"), follow=True)
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.context["user"].is_authenticated)

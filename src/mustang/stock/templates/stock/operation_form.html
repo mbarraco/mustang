@@ -30,7 +30,21 @@
                   {{ field.label }}
                   {% if field.field.required %}<span class="text-danger">*</span>{% endif %}
                 </label>
-                {{ field }}
+                {% if field.name == "instrument" %}
+                  <div class="d-flex flex-column flex-sm-row gap-2 align-items-stretch">
+                    <div class="flex-grow-1">
+                      {{ field }}
+                    </div>
+                    <a
+                      class="btn btn-outline-secondary flex-shrink-0"
+                      href="{% url 'stock:instrument-create' %}"
+                    >
+                      + New instrument
+                    </a>
+                  </div>
+                {% else %}
+                  {{ field }}
+                {% endif %}
                 {% if field.help_text %}
                   <div class="form-text">{{ field.help_text }}</div>
                 {% endif %}

@@ -1,0 +1,72 @@
+{% extends "stock/base.html" %}
+{% load socialaccount form_tags %}
+
+{% block title %}Create account · Mustang{% endblock %}
+
+{% block content %}
+  <div class="mx-auto" style="max-width: 480px;">
+    <h1 class="h3 mb-4">Create your account</h1>
+
+    {% if form.non_field_errors %}
+      <div class="alert alert-danger">
+        {{ form.non_field_errors|join:" " }}
+      </div>
+    {% endif %}
+
+    {% if google_login_enabled %}
+      <div class="mb-3">
+        <a
+          class="btn btn-outline-light d-flex align-items-center justify-content-center gap-2 w-100"
+          href="{% provider_login_url 'google' process='login' %}"
+        >
+          <img
+            src="https://www.gstatic.com/firebasejs/ui/2.0.0/images/auth/google.svg"
+            alt=""
+            width="20"
+            height="20"
+          >
+          Sign up with Google
+        </a>
+      </div>
+      <div class="text-center text-white-50 text-uppercase small my-3">
+        <span>or create a password</span>
+      </div>
+    {% endif %}
+
+    <form method="post" novalidate>
+      {% csrf_token %}
+      {% for hidden in form.hidden_fields %}
+        {{ hidden }}
+      {% endfor %}
+
+      {% for field in form.visible_fields %}
+        <div class="mb-3">
+          <label class="form-label" for="{{ field.id_for_label }}">{{ field.label }}</label>
+          {% if field.field.widget.input_type == "checkbox" %}
+            <div class="form-check">
+              {{ field|add_input_class:"form-check-input" }}
+              <label class="form-check-label" for="{{ field.id_for_label }}">
+                {{ field.label }}
+              </label>
+            </div>
+          {% else %}
+            {{ field|add_input_class:"form-control" }}
+          {% endif %}
+          {% if field.help_text %}
+            <div class="form-text">{{ field.help_text }}</div>
+          {% endif %}
+          {% if field.errors %}
+            <div class="text-danger small">{{ field.errors|join:" " }}</div>
+          {% endif %}
+        </div>
+      {% endfor %}
+
+      <button type="submit" class="btn btn-primary w-100">Create account</button>
+    </form>
+
+    <p class="mt-4 text-center text-white-50">
+      Already registered?
+      <a href="{% url 'account_login' %}">Sign in</a>
+    </p>
+  </div>
+{% endblock %}

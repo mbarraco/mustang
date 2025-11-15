@@ -22,27 +22,149 @@
           {% if next %}
             <input type="hidden" name="next" value="{{ next }}">
           {% endif %}
-          {% for field in form %}
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.symbol.id_for_label }}">
+              {{ form.symbol.label }}
+              {% if form.symbol.field.required %}
+                <span class="text-danger" title="Required">*</span>
+              {% endif %}
+            </label>
+            {{ form.symbol }}
+            {% if form.symbol.help_text %}
+              <div class="form-text">{{ form.symbol.help_text }}</div>
+            {% endif %}
+            <div class="form-text small mt-1" id="instrument-lookup-status"></div>
+            {% if form.symbol.errors %}
+              <div class="text-danger small mt-1">
+                {% for error in form.symbol.errors %}
+                  <div>{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.name.id_for_label }}">
+              {{ form.name.label }}
+              {% if form.name.field.required %}
+                <span class="text-danger" title="Required">*</span>
+              {% endif %}
+            </label>
+            {{ form.name }}
+            {% if form.name.help_text %}
+              <div class="form-text">{{ form.name.help_text }}</div>
+            {% endif %}
+            {% if form.name.errors %}
+              <div class="text-danger small mt-1">
+                {% for error in form.name.errors %}
+                  <div>{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.instrument_type.id_for_label }}">
+              {{ form.instrument_type.label }}
+              {% if form.instrument_type.field.required %}
+                <span class="text-danger" title="Required">*</span>
+              {% endif %}
+            </label>
+            {{ form.instrument_type }}
+            {% if form.instrument_type.help_text %}
+              <div class="form-text">{{ form.instrument_type.help_text }}</div>
+            {% endif %}
+            {% if form.instrument_type.errors %}
+              <div class="text-danger small mt-1">
+                {% for error in form.instrument_type.errors %}
+                  <div>{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.currency.id_for_label }}">
+              {{ form.currency.label }}
+              {% if form.currency.field.required %}
+                <span class="text-danger" title="Required">*</span>
+              {% endif %}
+            </label>
+            {{ form.currency }}
+            {% if form.currency.help_text %}
+              <div class="form-text">{{ form.currency.help_text }}</div>
+            {% endif %}
+            {% if form.currency.errors %}
+              <div class="text-danger small mt-1">
+                {% for error in form.currency.errors %}
+                  <div>{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="mb-3">
+            <label class="form-label" for="{{ form.exchange.id_for_label }}">
+              {{ form.exchange.label }}
+              {% if form.exchange.field.required %}
+                <span class="text-danger" title="Required">*</span>
+              {% endif %}
+            </label>
+            {{ form.exchange }}
+            {% if form.exchange.help_text %}
+              <div class="form-text">{{ form.exchange.help_text }}</div>
+            {% endif %}
+            {% if form.exchange.errors %}
+              <div class="text-danger small mt-1">
+                {% for error in form.exchange.errors %}
+                  <div>{{ error }}</div>
+                {% endfor %}
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="pt-4 mt-4 border-top">
             <div class="mb-3">
-              <label class="form-label" for="{{ field.id_for_label }}">
-                {{ field.label }}
-                {% if field.field.required %}
-                  <span class="text-danger" title="Required">*</span>
-                {% endif %}
-              </label>
-              {{ field }}
-              {% if field.help_text %}
-                <div class="form-text">{{ field.help_text }}</div>
-              {% endif %}
-              {% if field.errors %}
-                <div class="text-danger small mt-1">
-                  {% for error in field.errors %}
-                    <div>{{ error }}</div>
-                  {% endfor %}
-                </div>
-              {% endif %}
+              <h2 class="h6 mb-1">Optional symbol overrides</h2>
+              <p class="text-muted small mb-0">
+                Provide alternate Yahoo or Google tickers when they differ from the main symbol.
+              </p>
             </div>
-          {% endfor %}
+            <div class="row g-3">
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.yahoo_symbol.id_for_label }}">
+                  {{ form.yahoo_symbol.label }}
+                </label>
+                {{ form.yahoo_symbol }}
+                {% if form.yahoo_symbol.help_text %}
+                  <div class="form-text">{{ form.yahoo_symbol.help_text }}</div>
+                {% endif %}
+                {% if form.yahoo_symbol.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in form.yahoo_symbol.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+              <div class="col-md-6">
+                <label class="form-label" for="{{ form.google_symbol.id_for_label }}">
+                  {{ form.google_symbol.label }}
+                </label>
+                {{ form.google_symbol }}
+                {% if form.google_symbol.help_text %}
+                  <div class="form-text">{{ form.google_symbol.help_text }}</div>
+                {% endif %}
+                {% if form.google_symbol.errors %}
+                  <div class="text-danger small mt-1">
+                    {% for error in form.google_symbol.errors %}
+                      <div>{{ error }}</div>
+                    {% endfor %}
+                  </div>
+                {% endif %}
+              </div>
+            </div>
+          </div>
           {% if form.non_field_errors %}
             <div class="alert alert-danger">
               {% for error in form.non_field_errors %}
@@ -63,4 +185,137 @@
       <p class="mb-0">Any authenticated user can add symbols without needing admin access. The new instrument immediately becomes selectable for stock operations.</p>
     </div>
   </div>
+{% endblock %}
+
+{% block extra_scripts %}
+  {{ block.super }}
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+      const symbolInput = document.getElementById("id_symbol");
+      if (!symbolInput) {
+        return;
+      }
+      const lookupUrl = symbolInput.dataset.lookupUrl;
+      if (!lookupUrl) {
+        return;
+      }
+
+      const statusEl = document.getElementById("instrument-lookup-status");
+      const fields = {
+        name: document.getElementById("id_name"),
+        instrumentType: document.getElementById("id_instrument_type"),
+        currency: document.getElementById("id_currency"),
+        exchange: document.getElementById("id_exchange"),
+      };
+
+      const trackDirty = (field) => {
+        if (!field) {
+          return;
+        }
+        const eventName = field.tagName === "SELECT" ? "change" : "input";
+        field.addEventListener(eventName, () => {
+          field.dataset.dirty = "true";
+        });
+      };
+      Object.values(fields).forEach(trackDirty);
+
+      let lookupTimer = null;
+      let activeController = null;
+
+      const setStatus = (message, tone = "info") => {
+        if (!statusEl) {
+          return;
+        }
+        statusEl.textContent = message || "";
+        statusEl.classList.remove("text-danger", "text-success");
+        if (!message) {
+          return;
+        }
+        if (tone === "error") {
+          statusEl.classList.add("text-danger");
+        } else if (tone === "success") {
+          statusEl.classList.add("text-success");
+        }
+      };
+
+      const applySuggestions = (data) => {
+        if (data.name && fields.name && !fields.name.dataset.dirty) {
+          fields.name.value = data.name;
+        }
+        if (
+          data.instrument_type &&
+          fields.instrumentType &&
+          !fields.instrumentType.dataset.dirty
+        ) {
+          fields.instrumentType.value = data.instrument_type;
+        }
+        if (data.currency && fields.currency && !fields.currency.dataset.dirty) {
+          fields.currency.value = data.currency;
+        }
+        if (
+          data.exchange &&
+          fields.exchange &&
+          !fields.exchange.dataset.dirty
+        ) {
+          fields.exchange.value = String(data.exchange.id);
+        }
+      };
+
+      const performLookup = (symbol) => {
+        const url = new URL(lookupUrl, window.location.origin);
+        url.searchParams.set("symbol", symbol);
+        setStatus(`Searching details for ${symbol}…`);
+        if (activeController) {
+          activeController.abort();
+        }
+        const controller = new AbortController();
+        activeController = controller;
+        fetch(url.toString(), { signal: controller.signal })
+          .then(async (response) => {
+            const payload = await response.json().catch(() => ({}));
+            if (!response.ok) {
+              const message = payload.error || `Lookup failed for ${symbol}.`;
+              setStatus(message, "error");
+              return;
+            }
+            applySuggestions(payload);
+            let note = payload.name || payload.symbol || symbol;
+            const reminders = [];
+            if (!payload.exchange && payload.exchange_hint) {
+              reminders.push(`Select the ${payload.exchange_hint} exchange manually.`);
+            }
+            if (payload.currency_hint && payload.currency === "OTHER") {
+              reminders.push(
+                `Currency ${payload.currency_hint} is not tracked, defaulted to Other.`
+              );
+            }
+            const reminderText = reminders.length ? ` ${reminders.join(" ")}` : "";
+            setStatus(`Loaded details for ${note}.${reminderText}`, "success");
+          })
+          .catch((error) => {
+            if (error.name === "AbortError") {
+              return;
+            }
+            setStatus("Unable to fetch instrument details.", "error");
+          });
+      };
+
+      const scheduleLookup = () => {
+        const symbol = symbolInput.value.trim();
+        if (!symbol) {
+          setStatus("");
+          return;
+        }
+        window.clearTimeout(lookupTimer);
+        lookupTimer = window.setTimeout(() => performLookup(symbol), 500);
+      };
+
+      symbolInput.addEventListener("input", scheduleLookup);
+      symbolInput.addEventListener("blur", () => {
+        if (symbolInput.value.trim()) {
+          scheduleLookup();
+        }
+      });
+    });
+  </script>
 {% endblock %}
